@@ -20,8 +20,8 @@ class GeoScriptProject(info: ProjectInfo) extends ParentProject(info) {
         "http://download.osgeo.org/webdav/geotools/"
     val opengeo = "OpenGeo Maven Repository" at 
         "http://repo.opengeo.org/"
-    val specs_repo = "Specs Maven Repository" at 
-        "http://specs.googlecode.com/svn/maven2/"
+    val specs_repo = "Scala-Tools Snapshots Repository" at 
+        "http://scala-tools.org/repo-snapshots/"
     val java_net = "Java.net Maven Repository" at 
         "http://download.java.net/maven/2/"
 
@@ -38,7 +38,7 @@ class GeoScriptProject(info: ProjectInfo) extends ParentProject(info) {
     val scalaSwing = "org.scala-lang" % "scala-swing" % ("2.8.0.Beta1")
     val jai = "javax.media" % "jai_core" % "1.1.3"
 
-    val specs = "org.scala-tools.testing" %% "specs" % "1.6.3" % "test"
+    val specs = "org.scala-tools.testing" %% "specs" % "1.6.5-SNAPSHOT" % "test"
   }
 
   class SphinxProject(val info: ProjectInfo) 

@@ -13,6 +13,8 @@ import org.geotools.styling.SLDTransformer
 import org.geotools.styling.Style
 import org.geotools.util.SimpleInternationalString
 
+import scala.math.{ min, max }
+
 object ColorRamp extends org.geoscript.feature.GeoCrunch {
   def pairwise[A](s: List[A]): List[(A,A)] = s zip (s drop 1)
 
@@ -21,18 +23,18 @@ object ColorRamp extends org.geoscript.feature.GeoCrunch {
     // Use the value for the first feature as the starting value 
     // for both max and min
 
-    var min = Double.NegativeInfinity
-    var max = Double.PositiveInfinity
+    var lower = Double.NegativeInfinity
+    var upper = Double.PositiveInfinity
 
     for (f <- col) { 
       val current = f.get[Double](p)
-      min = Math.min(min, current)
-      max = Math.max(max, current)
+      lower = min(lower, current)
+      upper = max(upper, current)
     }
 
     // find a position on the ramp by taking a weighted 
     // average of the max and min values.
-    def ramp(weight: Double) = min + (max - min) * weight
+    def ramp(weight: Double) = lower + (upper - lower) * weight
 
     // create 10 pairs representing ranges between min and max, linearly spaced
     pairwise((0 to 10).toList.map(x => ramp(x / 10d)))
