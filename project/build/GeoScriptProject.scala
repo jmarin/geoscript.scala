@@ -25,7 +25,7 @@ class GeoScriptProject(info: ProjectInfo) extends ParentProject(info) {
     val java_net = "Java.net Maven Repository" at 
         "http://download.java.net/maven/2/"
 
-    val gtVersion = "2.6.1"
+    val gtVersion = "2.6.0"
         
     val gtMain = "org.geotools" % "gt-main" % gtVersion
     val gtReferencing = "org.geotools" % "gt-epsg-hsql" % gtVersion
@@ -35,8 +35,10 @@ class GeoScriptProject(info: ProjectInfo) extends ParentProject(info) {
     val gtPostgis = "org.geotools.jdbc"   % "gt-jdbc-postgis" % gtVersion 
     val gtSpatiaLite = "org.geotools.jdbc" % "gt-jdbc-spatialite" % gtVersion
 
-    val scalaSwing = "org.scala-lang" % "scala-swing" % ("2.8.0.Beta1")
+    val scalaSwing = "org.scala-lang" % "scala-swing" % "2.8.0"
     val jai = "javax.media" % "jai_core" % "1.1.3"
+
+    val json = "net.sf.json-lib" % "json-lib" % "2.3" classifier "jdk15"
 
     val specs = "org.scala-tools.testing" %% "specs" % "1.6.5-SNAPSHOT" % "test"
   }
