@@ -1,6 +1,5 @@
-package org.geoscript.example
-
-import org.geoscript._
+package org.geoscript
+package example
 
 object Intersections extends GeoScript with feature.GeoCrunch {
   def process(src: layer.Layer, dest: layer.Layer, joinField: String) {
@@ -25,7 +24,7 @@ object Intersections extends GeoScript with feature.GeoCrunch {
   def rewrite(schema: feature.Schema, fieldName: String): feature.Schema = 
     feature.Schema(
       schema.name + "_intersections",
-      feature.Field("geom", classOf[com.vividsolutions.jts.geom.Geometry]),
+      feature.Field("geom", classOf[com.vividsolutions.jts.geom.Geometry], projection.Projection("EPSG:4326")),
       feature.Field(fieldName + "Left", classOf[String]),
       feature.Field(fieldName + "Right", classOf[String])
     )

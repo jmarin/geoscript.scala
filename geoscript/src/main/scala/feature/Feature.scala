@@ -116,6 +116,34 @@ trait Field {
   override def toString = "%s: %s".format(name, binding.getSimpleName)
 }
 
+trait Binding[T] {
+  def underlying: Class[_]
+}
+
+private trait NonSpatialBinding[T] extends Binding[T]
+private trait SpatialBinding[T] extends Binding[T] {
+  override def underlying: Class[_ <: jts.Geometry]
+  def wrapped: Class[_ <: Geometry]
+}
+
+private object NonSpatialBinding {
+  class Impl[T](val underlying: Class[T]) extends NonSpatialBinding[T]
+  implicit val stringBinding: NonSpatialBinding[String] = new Impl(classOf[String])
+}
+
+private object SpatialBinding {
+  class Impl[T](
+    val underlying: Class[_ <: jts.Geometry],
+    val wrapped: Class[_ <: Geometry]
+  ) extends SpatialBinding[T] 
+
+  implicit val pointBinding: SpatialBinding[Point] =
+    new Impl(classOf[jts.Point], classOf[Point])
+
+  implicit val jtsGeomBinding: SpatialBinding[jts.Geometry] =
+    new Impl(classOf[jts.Geometry], classOf[Geometry])
+}
+
 /**
  * A Field that represents a Geometry. GeoFields add projection information to
  * normal fields.
@@ -123,6 +151,9 @@ trait Field {
 trait GeoField extends Field {
   override def binding: Class[_ <: Geometry]
   override def gtBinding: Class[_ <: jts.Geometry] = Geometry.jtsClass(binding)
+
+  def copyWith(projection: Projection): GeoField
+
   /**
    * The Projection used for this field's geometry.
    */
@@ -133,6 +164,15 @@ trait GeoField extends Field {
  * A companion object providing various methods of creating Field instances.
  */
 object Field {
+  private case class GeoImpl(name: String, binding: Class[_ <: Geometry], projection: Projection)
+  extends GeoField
+  {
+    def copyWith(projection: Projection) = copy(projection = projection)
+  }
+
+  private case class Impl(name: String, binding: Class[_])
+  extends Field
+
   /**
    * Create a GeoField by wrapping an OpenGIS GeometryDescriptor
    */
@@ -145,6 +185,8 @@ object Field {
         )
 
       def projection = Projection(wrapped.getCoordinateReferenceSystem())
+
+      def copyWith(projection: Projection) = GeoImpl(name, binding, projection)
     }
 
   /**
@@ -168,12 +210,8 @@ object Field {
    * val geoProp = Field("the_geom", classOf[Point], Projection("epsg:26912"))
    * </pre>
    */
-  def apply(n: String, b: Class[_ <: Geometry], p: Projection): GeoField = 
-    new GeoField {
-      def name = n
-      def binding = b
-      def projection = p
-    }
+  def apply[G](name: String, `class`: Class[G], projection: Projection)(implicit binding: SpatialBinding[G]): GeoField =
+    GeoImpl(name, binding.wrapped, projection)
 
   /**
    * Create a Field from a name and a type.  Note that you need to pass in the
@@ -182,16 +220,8 @@ object Field {
    * val prop = Field("name", classOf[String])
    * </pre>
    */
-  def apply(n: String, b: Class[_]): Field = {
-    if (classOf[Geometry].isAssignableFrom(b)) {
-      apply(n, b.asInstanceOf[Class[_ <: Geometry]], null)
-    } else {
-      new Field {
-        def name = n
-        def binding = b
-      }
-    }
-  }
+ def apply[T](name: String, clazz: Class[T])(implicit binding: NonSpatialBinding[T]): Field =
+   new Impl(name, clazz)
 }
 
 /**

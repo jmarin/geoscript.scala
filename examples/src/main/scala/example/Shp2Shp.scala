@@ -1,9 +1,7 @@
-package org.geoscript.example
+package org.geoscript
+package example
 
-import org.geoscript._
-import feature._
-import layer._
-import projection._
+import feature._, layer._, projection._
 
 object Shp2Shp extends GeoScript {
   def main(args: Array[String]) {
@@ -11,8 +9,8 @@ object Shp2Shp extends GeoScript {
     val source = Shapefile(sourcefile)
     val destSchema = Schema(destname,
       source.schema.fields map {
-        case g: GeoField => Field(g.name, g.binding, proj)
-        case f: Field => f
+        case (g: GeoField) => g.copyWith(projection = proj) // Field(g.name, g.binding, proj)
+        case (f: Field) => f
       }
     )
     val dest = source.workspace.create(destSchema)
