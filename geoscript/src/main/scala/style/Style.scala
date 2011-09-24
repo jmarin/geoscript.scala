@@ -145,6 +145,11 @@ object Paint {
       Color(colorName)
     else
       Color("#000000")
+
+  implicit def awtColorToPaint(color: java.awt.Color): Paint = {
+    val components = color.getColorComponents(Array.ofDim[Float](3))
+      Color("#%02x%02x%02x".format(components.map(x => (x * 255).toInt): _*))
+  }
 }
 
 case class Color(rgb: String) extends Paint {
