@@ -14,7 +14,7 @@ case class Description(
   /** A string to contribute to the Rule's title in legends */
   title: Option[String],
   /** A short description of the Rule's intent */
-  abstrakt: Option[String]
+  `abstract`: Option[String]
 ) {
   /** 
    * Combine this rule with another by concatenating their titles and
@@ -31,7 +31,7 @@ case class Description(
 
     Description(
       compose(this.title, that.title),
-      compose(this.abstrakt, that.abstrakt)
+      compose(this.`abstract`, that.`abstract`)
     )
   }
 }

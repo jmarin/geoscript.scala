@@ -626,8 +626,8 @@ class Translator(val baseURL: Option[java.net.URL]) {
               for (m <- max) sldRule.setMaxScaleDenominator(m)
               for (title <- rule.description.title)
                 sldRule.getDescription().setTitle(title)
-              for (abstrakt <- rule.description.abstrakt)
-                sldRule.getDescription().setAbstract(abstrakt)
+              for (a <- rule.description.`abstract`)
+                sldRule.getDescription().setAbstract(a)
 
               val filter =
                 SelectorOps.trim(_.filterOpt.isDefined)(restricted).flatMap(_.filterOpt)
