@@ -559,7 +559,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
   def css2sld(styleSheet: Seq[Rule]): gt.Style = {
     val sld = styles.createStyle
 
-    val rules = stableSort(styleSheet, Specificity.order _).reverse
+    val rules = stableSort(styleSheet, Specificity.order _)
 
     import SelectorOps._
 
@@ -668,27 +668,22 @@ class Translator(val baseURL: Option[java.net.URL]) {
     grouped ++ Seq((0d, labels map (_._2)))
   }
 
-  /**
-   * Given a list, generate all possible groupings of the contents of that list
-   * into two sublists.  The sublists preserve the ordering of the original
-   * list.
-   *
-   * This implementation is specialized for dealing with rules.  In particular,
-   * it prunes the search space when unsatisfiable rule combinations are
-   * discovered.
-   */
-   def combinations(xs: Seq[Rule])(prune: Rule => Boolean): Seq[Rule] =
-     xs match {
-       case Seq() => Seq(EmptyRule)
-       case Seq(x, xs @ _*) =>
-         val negated = EmptyRule.copy(selectors = Seq(x.negatedSelector))
-
-         for {
-           combo <- combinations(xs)(prune)
-           next <- Seq(x merge combo, combo merge negated) if prune(next)
-         } yield next
-     }
-
-  def cascading2exclusive(xs: Seq[Rule]): Seq[Rule] =
-    combinations(xs)(_.isSatisfiable)
+  def cascading2exclusive(xs: Seq[Rule]): Seq[Rule] = {
+    def recurse(unconsidered: Seq[Rule], rule: Rule, accum: Seq[Rule]): Seq[Rule] = {
+      if (! rule.isSatisfiable) {
+        // short-circuit if the combination of selectors so far is clearly unsatisfiable
+        accum
+      } else if (unconsidered isEmpty) {
+        // no more rules to look at, let's include this one
+        rule +: accum
+      } else {
+        val head = unconsidered.head
+        val tail = unconsidered.tail
+        val withThisRuleNegated =
+          recurse(tail, rule mergeSelector head.negatedSelector, accum)
+        recurse(tail, head merge rule, withThisRuleNegated)
+      }
+    }
+    recurse(xs, EmptyRule, Seq.empty)
+  }
 }

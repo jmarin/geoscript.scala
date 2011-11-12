@@ -113,6 +113,11 @@ case class Rule(
       this.contexts ++ that.contexts
     )
 
+  def mergeSelector(sel: Selector): Rule =
+    copy(
+      selectors = SelectorOps.simplify(sel +: selectors)
+    )
+
   /**
    * Is it possible that a feature could meet the constraints in this rule's
    * selectors?
@@ -326,6 +331,8 @@ case class AndSelector(children: Seq[Selector]) extends Selector {
     } else {
       None
     }
+
+  override def toString = children mkString (" AND ")
 }
 
 /**
@@ -351,4 +358,6 @@ case class OrSelector(children: Seq[Selector]) extends Selector {
     } else {
       None
     }
+
+  override def toString = children mkString (" OR ")
 }
