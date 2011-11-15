@@ -38,14 +38,12 @@ trait ProblemDomain {
     constraints: Constraints
   ) {
     def complete(assignment: Assignment) = assignment.keySet == variables
-    // todo: rename to consistent
-    def fullyConsistent(assignment: Assignment) = {
+    def consistent(assignment: Assignment) = {
       val pairs =
         for (x <- assignment.view; y <- assignment.view) yield (x, y)
       pairs.forall(constraints.tupled)
     }
-    // todo: rename to arcs
-    def allArcs = for (x <- variables; y <- variables; if x != y) yield (x, y)
+    def arcs = for (x <- variables; y <- variables; if x != y) yield (x, y)
     def neighbors(x: Variable): Set[Variable] = constraints.neighbors(x)
   }
 
@@ -71,7 +69,7 @@ trait ProblemDomain {
         for {
           value <- orderDomainValues(problem, assignment, variable).view
           assignment_ = assignment + (variable -> value)
-          if problem.fullyConsistent(assignment_)
+          if problem.consistent(assignment_)
           inferences <- inference(problem, variable, value).toSeq
           assignment__ = assignment_ ++ inferences
           result <- backtrack(assignment__)
@@ -114,6 +112,6 @@ trait ProblemDomain {
       }
     }
 
-    recurse(Queue.empty ++ problem.allArcs, problem)
+    recurse(Queue.empty ++ problem.arcs, problem)
   }
 }
