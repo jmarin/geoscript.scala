@@ -669,21 +669,72 @@ class Translator(val baseURL: Option[java.net.URL]) {
   }
 
   def cascading2exclusive(xs: Seq[Rule]): Seq[Rule] = {
-    def recurse(unconsidered: Seq[Rule], rule: Rule, accum: Seq[Rule]): Seq[Rule] = {
-      if (! rule.isSatisfiable) {
-        // short-circuit if the combination of selectors so far is clearly unsatisfiable
-        accum
-      } else if (unconsidered isEmpty) {
-        // no more rules to look at, let's include this one
-        rule +: accum
-      } else {
-        val head = unconsidered.head
-        val tail = unconsidered.tail
-        val withThisRuleNegated =
-          recurse(tail, rule mergeSelector head.negatedSelector, accum)
-        recurse(tail, head merge rule, withThisRuleNegated)
-      }
+    object StyleSheet extends logic.ProblemDomain {
+      type Variable = Int
+      type Value = Boolean
     }
-    recurse(xs, EmptyRule, Seq.empty)
+    import StyleSheet._
+
+    val variables = xs.indices.toSet
+    val domains = xs.indices.map(x => (x, Set(true, false))).toMap
+    val constraints = {
+      val implication = (a: Boolean, b: Boolean) => !b || a
+      // Opposition: If selector A is satisfied, selector B must not be satisfied
+      // Spelled out: (a && !b) || !a
+      val opposition = (a: Boolean, b: Boolean) => !(a && b)
+      // Irrelevance: Selector A's satisfaction doesn't force B's state one way or the other.
+      // Note that these are not generally commutative.
+
+      val relations = 
+        for { 
+          (r, a) <- xs.zipWithIndex
+          (s, b) <- xs.zipWithIndex
+          if a != b
+          x = OrSelector(r.selectors)
+          y = OrSelector(s.selectors)
+        } yield {
+          if (SelectorOps.isDisjoint(x, y)) 
+            Some((a, b), opposition)
+          else if (SelectorOps.isSubSet(x, y))
+            Some((a, b), implication)
+          else
+            None
+        }
+
+      Constraints(relations.flatten.toMap)
+    }
+
+    val p = Problem(variables, domains, constraints)
+
+    val assignments = 
+      solve(selectUnassignedVariable, orderDomainValues, inference)(p)
+
+    def resolve(assignment: Seq[Boolean]): Option[Rule] = {
+      val (include, negate) = (xs zip assignment).partition(_._2)
+      include.map(_._1).reduceLeftOption(_ merge _)
+        .map { r => 
+          negate.foldLeft(r) { _ mergeSelector _._1.negatedSelector }
+        }
+        .filter { _.isSatisfiable }
+    }
+
+    val asSequences = assignments.map(_.toSeq.sortBy(_._1).map(_._2))
+    (asSequences flatMap resolve)
+    // def recurse(unconsidered: Seq[Rule], rule: Rule, accum: Seq[Rule]): Seq[Rule] = {
+    //   if (! rule.isSatisfiable) {
+    //     // short-circuit if the combination of selectors so far is clearly unsatisfiable
+    //     accum
+    //   } else if (unconsidered isEmpty) {
+    //     // no more rules to look at, let's include this one
+    //     rule +: accum
+    //   } else {
+    //     val head = unconsidered.head
+    //     val tail = unconsidered.tail
+    //     val withThisRuleNegated =
+    //       recurse(tail, rule mergeSelector head.negatedSelector, accum)
+    //     recurse(tail, head merge rule, withThisRuleNegated)
+    //   }
+    // }
+    // recurse(xs, EmptyRule, Seq.empty)
   }
 }
