@@ -1,5 +1,7 @@
 package org.geoscript.geocss.logic
 
+import scala.annotation.tailrec
+
 trait ProblemDomain {
   type Variable
   type Value
@@ -61,22 +63,31 @@ trait ProblemDomain {
     orderDomainValues: (Problem, Assignment, Variable) => Seq[Value],
     inference: (Problem, Variable, Value) => Option[Assignment]
   ) (problem: Problem): Seq[Assignment] = {
-    def backtrack(assignment: Map[Variable, Value]): Seq[Assignment] =
-      if (problem.complete(assignment))
-        Seq(assignment)
-      else {
-        val variable = selectUnassignedVariable(problem, assignment)
-        for {
-          value <- orderDomainValues(problem, assignment, variable).view
-          assignment_ = assignment + (variable -> value)
-          if problem.consistent(assignment_)
-          inferences <- inference(problem, variable, value).toSeq
-          assignment__ = assignment_ ++ inferences
-          result <- backtrack(assignment__)
-        } yield result
-      }
 
-    backtrack(Map.empty)
+    @tailrec
+    def recurse(
+      stack: List[Assignment], solutions: List[Assignment]
+    ): Seq[Assignment] = {
+      if (stack isEmpty) solutions
+      else {
+        val h :: t = stack
+        if (problem.complete(h))
+          recurse(t, h :: solutions)
+        else {
+          val variable = selectUnassignedVariable(problem, h)
+          val assignments =
+            for {
+              value <- orderDomainValues(problem, h, variable).toList
+              assignment = h + (variable -> value)
+              if problem.consistent(assignment)
+              Some(inferences) = inference(problem, variable, value)
+            } yield assignment ++ inferences
+          recurse(assignments ::: t, solutions)
+        }
+      }
+    }
+
+    recurse(List(Map.empty), Nil)
   }
 
   def reduce(problem: Problem): Option[Problem] = {
@@ -95,6 +106,7 @@ trait ProblemDomain {
     }
 
     import collection.immutable.Queue
+    @tailrec
     def recurse(queue: Queue[Arc], problem: Problem): Option[Problem] = {
       if (queue isEmpty)
         Some(problem)

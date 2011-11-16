@@ -720,21 +720,5 @@ class Translator(val baseURL: Option[java.net.URL]) {
 
     val asSequences = assignments.map(_.toSeq.sortBy(_._1).map(_._2))
     (asSequences flatMap resolve)
-    // def recurse(unconsidered: Seq[Rule], rule: Rule, accum: Seq[Rule]): Seq[Rule] = {
-    //   if (! rule.isSatisfiable) {
-    //     // short-circuit if the combination of selectors so far is clearly unsatisfiable
-    //     accum
-    //   } else if (unconsidered isEmpty) {
-    //     // no more rules to look at, let's include this one
-    //     rule +: accum
-    //   } else {
-    //     val head = unconsidered.head
-    //     val tail = unconsidered.tail
-    //     val withThisRuleNegated =
-    //       recurse(tail, rule mergeSelector head.negatedSelector, accum)
-    //     recurse(tail, head merge rule, withThisRuleNegated)
-    //   }
-    // }
-    // recurse(xs, EmptyRule, Seq.empty)
   }
 }
