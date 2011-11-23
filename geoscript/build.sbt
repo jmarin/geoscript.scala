@@ -1,5 +1,7 @@
 name := "geoscript"
 
+seq(com.github.retronym.SbtOneJar.oneJarSettings:_*)
+
 libraryDependencies <+= scalaVersion { v =>
   "org.scala-lang" % "scala-swing" % v 
 }
@@ -24,3 +26,5 @@ libraryDependencies ++=
     "org.scala-tools.testing" %% "specs" % "[1.6,1.7)" % "test",
     "com.lowagie" % "itext" % "2.1.5"
   )
+
+libraryDependencies += "commons-lang" % "commons-lang" % "2.6"
