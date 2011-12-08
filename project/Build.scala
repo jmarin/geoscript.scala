@@ -1,9 +1,15 @@
 import sbt._, Keys._, Defaults.defaultSettings
+import com.github.retronym.SbtOneJar
 
 object GeoScript extends Build {
   lazy val gtVersion = 
     SettingKey[String]("gt-version", "Version number for GeoTools modules")
 
+  
+  def standardSettings = Seq (
+    exportJars := true
+  ) ++ Defaults.defaultSettings
+ 
   val meta =
     Seq[Setting[_]](
       organization := "org.geoscript",
@@ -25,7 +31,7 @@ object GeoScript extends Build {
           <exclude org="xml-apis" name="xml-apis"/>
         </dependencies>
       )
-    ) ++ meta ++ defaultSettings
+    ) ++ meta ++ defaultSettings ++ standardSettings ++ SbtOneJar.oneJarSettings
 
   lazy val root =
     Project("root", file(".")) aggregate(css, docs, examples, library)
@@ -34,7 +40,7 @@ object GeoScript extends Build {
   lazy val examples = 
     Project("examples", file("examples"), settings = common) dependsOn(library)
   lazy val library =
-    Project("library", file("geoscript"), settings = common) dependsOn(css, dummy)
+    Project("library", file("geoscript"), settings = standardSettings ++ SbtOneJar.oneJarSettings ++ common) dependsOn(css, dummy)
   lazy val dummy = 
     Project("dummy", file("dummy"), settings = meta ++ defaultSettings)
   lazy val docs = Project(
