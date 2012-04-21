@@ -3,7 +3,7 @@ package org.geoscript.geocss
 import math._
 import util.Sorting.stableSort
 
-import org.geoscript.geocss.filter.FilterOps
+import org.geoscript.support.logic.reduce
 
 import org.geotools.feature.NameImpl
 import org.geotools.{styling => gt}
@@ -17,6 +17,8 @@ import org.geotools.styling.{
   FeatureTypeStyle
 }
 
+import org.opengis.{ filter => ogc }
+
 /**
  * The Translator object houses some facilities for converting token lists to
  * GeoTools Style objects.  The css2sld method does the actual conversion.
@@ -27,9 +29,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
   def this() = this(None)
   def this(url: String) = this(Some(new java.net.URL(url)))
 
-  import SelectorOps.{ Exclude, negate, simplify }
   import CssOps.{ Color, Specificity, Symbol, URL, colors, expand }
-  import FilterOps.{ filters }
   val styles = org.geotools.factory.CommonFactoryFinder.getStyleFactory(null)
   type OGCExpression = org.opengis.filter.expression.Expression
 
@@ -77,7 +77,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
     prefix: String,
     props: Map[String, Seq[Value]],
     markProps: Seq[Property]
-  ): gt.Graphic = {
+  ): Option[gt.Graphic] = {
     def p(name: String) = 
       props.get(prefix + "-" + name) orElse
       markProps.find(_.name == name).flatMap(_.values.headOption)
@@ -97,18 +97,17 @@ class Translator(val baseURL: Option[java.net.URL]) {
 
     val externalGraphic = buildExternalGraphic(url, mimetype)
 
-    if (mark != null || externalGraphic != null) {
-      styles.createGraphic(
+    if (mark != null || externalGraphic != null)
+      Some(styles.createGraphic(
         externalGraphic,
         mark,
         null,
         opacity,
         size getOrElse null,
         rotation getOrElse null
-      )
-    } else { 
-      null
-    }
+      ))
+    else
+      None
   }
 
   def buildMark(
@@ -368,8 +367,10 @@ class Translator(val baseURL: Option[java.net.URL]) {
 
         val graphic = buildGraphic("stroke", props, markProps)
 
-        val graphicStroke = if (strokeRepeat == "repeat") graphic else null
-        val graphicFill = if (strokeRepeat == "stipple") graphic else null
+        val graphicStroke = 
+          for (g <- graphic if strokeRepeat == "repeat") yield g
+        val graphicFill =
+          for (g <- graphic if strokeRepeat == "stipple") yield g 
 
         val sym = 
           styles.createLineSymbolizer(
@@ -381,8 +382,8 @@ class Translator(val baseURL: Option[java.net.URL]) {
               linecap,
               dashArray,
               dashOffset,
-              graphicFill,
-              graphicStroke
+              graphicFill getOrElse(null),
+              graphicStroke getOrElse(null)
             ),
             null
           )
@@ -408,10 +409,15 @@ class Translator(val baseURL: Option[java.net.URL]) {
         val graphic = buildGraphic("fill", props, markProps) 
 
         val sym = styles.createPolygonSymbolizer(
+          null,
+          styles.createFill(
+            fillParams._3,
             null,
-            styles.createFill(fillParams._3, null, opacity, graphic),
-            null
-          )
+            opacity,
+            graphic getOrElse(null)
+          ),
+          null
+        )
         sym.setGeometry(geom)
         (zIndex, sym)
       }
@@ -419,7 +425,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
     val pointSyms: Seq[(Double, PointSymbolizer)] = 
       (expand(properties, "mark").toStream zip
        (Stream.from(1) map { orderedMarkRules("mark", _) })
-      ).map { case (props, markProps) => 
+      ).flatMap { case (props, markProps) => 
         val geom = (props.get("mark-geometry") orElse props.get("geometry"))
           .map(expression).getOrElse(null)
         val zIndex: Double = 
@@ -429,9 +435,11 @@ class Translator(val baseURL: Option[java.net.URL]) {
 
         val graphic = buildGraphic("mark", props, markProps)
 
-        val sym = styles.createPointSymbolizer(graphic, null)
-        sym.setGeometry(geom)
-        (zIndex, sym)
+        for (g <- graphic) yield {
+          val sym = styles.createPointSymbolizer(g, null)
+          sym.setGeometry(geom)
+          (zIndex, sym)
+        }
       }
 
     val textSyms: Seq[(Double, TextSymbolizer)] =
@@ -498,7 +506,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
           if (props contains "shield")
             buildGraphic("shield", props, shieldProps)
           else
-            null
+            None
 
         val placement = offset match {
           case Some(Seq(d)) => styles.createLinePlacement(d)
@@ -525,7 +533,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
         // the sort of Symbolizer which supports graphics. Let's at least not
         // cast unless we need to.  
         // TODO: see if there's a nicer way to deal with this that
-        if (shield != null) sym.asInstanceOf[TextSymbolizer2].setGraphic(shield)
+        shield.foreach { sym.asInstanceOf[TextSymbolizer2].setGraphic(_) }
 
         for (priority <- props.get("-gt-label-priority") map expression) {
           sym.setPriority(priority)
@@ -561,35 +569,33 @@ class Translator(val baseURL: Option[java.net.URL]) {
 
     val rules = stableSort(styleSheet, Specificity.order _).reverse
 
-    import SelectorOps._
-
     def extractTypeName(rule: Rule): Option[String] =
-      flatten(AndSelector(rule.selectors)).collect { 
-        case TypenameSelector(typename) => typename 
+      flatten(And(rule.selectors)).collect { 
+        case Typename(typename) => typename 
       } headOption
 
     def extractScaleRanges(rule: Rule): Seq[Pair[Option[Double], Option[Double]]] = {
-      def findScales(s: Selector): Seq[Double] = 
-        s match {
-          case PseudoSelector("scale", _, d) => Seq(d.toDouble)
-          case AndSelector(children) => children flatMap findScales
-          case OrSelector(children) => children flatMap findScales
-          case _ => Nil
-        }
-
-      val scales = rule.selectors.flatMap(findScales).sorted.distinct
-      val limits = None +: scales.sorted.distinct.map(Some(_)) :+ None
+      val scales = 
+        flatten(And(rule.selectors))
+          .collect { 
+            case PseudoSelector("scale", _, d) => d.toDouble
+            case Not(PseudoSelector("scale", _, d)) => d.toDouble
+          }
+          .sorted
+          .distinct
+      
+      val limits = None +: (scales map (Some(_))) :+ None
       limits zip limits.tail
     }
 
     def isForTypename(typename: Option[String])(rule: Rule): Boolean =
       typename map { t => 
-        simplify(allOf(TypenameSelector(t) +: rule.selectors)) != Empty
+        reduce(allOf(Typename(t) +: rule.selectors)) != Exclude
       } getOrElse true
 
     def stripTypenames(rule: Rule): Rule =
       rule.copy(selectors = rule.selectors map {
-        case TypenameSelector(_) => AcceptSelector
+        case Typename(_) => Accept
         case selector => selector
       })
 
@@ -611,13 +617,11 @@ class Translator(val baseURL: Option[java.net.URL]) {
           val sldRule = styles.createRule()
           val ranges = extractScaleRanges(rule)
 
-          for ((min, max) <- ranges) {
+          for (range @ (min, max) <- ranges) {
             val minSelector = min.map(x => PseudoSelector("scale", ">", x.toString))
             val maxSelector = max.map(x => PseudoSelector("scale", "<", x.toString))
             val restricted = 
-              SelectorOps.simplify(
-                SelectorOps.allOf(rule.selectors ++ minSelector ++ maxSelector)
-              )
+              reduce(allOf(rule.selectors ++ minSelector ++ maxSelector))
 
             if (restricted != Exclude) {
               val sldRule = styles.createRule()
@@ -629,8 +633,7 @@ class Translator(val baseURL: Option[java.net.URL]) {
               for (abstrakt <- rule.description.abstrakt)
                 sldRule.getDescription().setAbstract(abstrakt)
 
-              val filter =
-                SelectorOps.trim(_.filterOpt.isDefined)(restricted).flatMap(_.filterOpt)
+              val filter = realize(restricted)
 
               for (f <- filter)
                 sldRule.setFilter(f)
@@ -668,27 +671,86 @@ class Translator(val baseURL: Option[java.net.URL]) {
     grouped ++ Seq((0d, labels map (_._2)))
   }
 
-  /**
-   * Given a list, generate all possible groupings of the contents of that list
-   * into two sublists.  The sublists preserve the ordering of the original
-   * list.
-   *
-   * This implementation is specialized for dealing with rules.  In particular,
-   * it prunes the search space when unsatisfiable rule combinations are
-   * discovered.
-   */
-   def combinations(xs: Seq[Rule])(prune: Rule => Boolean): Seq[Rule] =
-     xs match {
-       case Seq() => Seq(EmptyRule)
-       case Seq(x, xs @ _*) =>
-         val negated = EmptyRule.copy(selectors = Seq(x.negatedSelector))
+  def simplifyList(sels: Seq[Selector]): Seq[Selector] = {
+    if (sels.isEmpty) Seq()
+    else {
+      val reduced = 
+        sels.map(consolidate).reduce {
+          (a,b) => reduce[Selector](And(Seq(a, b)))
+        }
+      reduced match {
+        case And(sels) => sels
+        case sel               => Seq(sel)
+      }
+    }
+  }
 
-         for {
-           combo <- combinations(xs)(prune)
-           next <- Seq(x merge combo, combo merge negated) if prune(next)
-         } yield next
-     }
+  def consolidate(s: Selector): Selector = {
+    def f(s: Selector): Seq[Selector] =
+      s match {
+        case And(children) => 
+          val children0 = children flatMap f
+          Seq(
+            children0 match {
+              case Seq() => Accept
+              case Seq(s) => s
+              case children0 => And(children0)
+            }
+          )
+        case Or(children) =>
+          val children0 = children flatMap f
+          Seq(
+            children0 match {
+              case Seq() => Exclude
+              case Seq(s) => s
+              case children0 => Or(children0)
+            }
+          )
+        case Not(Not(child)) => Seq(consolidate(child))
+        case Not(child) => Seq(Not(consolidate(child)))
+        case p => Seq(p)
+      }
 
-  def cascading2exclusive(xs: Seq[Rule]): Seq[Rule] =
-    combinations(xs)(_.isSatisfiable)
+    f(s).head
+  }
+
+  def simplifySelector(r: Rule): Rule =
+    r.copy(selectors = simplifyList(r.selectors))
+
+  def merge(a: Rule, b: Rule): Rule = (a merge b)
+
+  def constrain(a: Rule, b: Seq[Selector]): Rule =
+    a.copy(selectors = (a.selectors ++ b))
+
+  def cascading2exclusive(xs: Seq[Rule]): Seq[Rule] = {
+    import org.geoscript.support.graph._
+
+    val mutuallyExclusive = (a: Rule, b: Rule) =>
+      reduce[Selector](And(a.selectors ++ b.selectors)) == Exclude
+     
+    val cliques = maximalCliques(xs.toSet, mutuallyExclusive)
+    val combinations = enumerateCombinations(cliques)
+
+    val ExclusiveRule = EmptyRule.copy(selectors = Seq(Exclude))
+
+    val negate = (x: Rule) =>
+      x.copy(selectors = Seq(Not(And(x.selectors))))
+    val include = (in: Set[Rule]) =>
+      if (in isEmpty) ExclusiveRule else (xs.view filter(in) reduceLeft(merge))
+    val exclude = (xs: Seq[Rule]) =>
+      xs.map { r => Not(And(r.selectors)) }
+
+    val rulesets = 
+      for {
+        combo <- combinations
+        remainder = xs filterNot(combo contains)
+        included = include(combo)
+        excluded = exclude(remainder)
+        constrained = constrain(included, excluded)
+        ruleset = simplifySelector(constrained)
+        if ruleset.isSatisfiable
+      } yield ruleset
+
+    rulesets.toSeq
+  }
 }

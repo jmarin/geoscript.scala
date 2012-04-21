@@ -6,11 +6,12 @@ import collection.JavaConversions._
 import org.opengis.filter.{
   BinaryComparisonOperator,
   BinaryLogicOperator,
-  Not,
   PropertyIsBetween,
   PropertyIsLike,
   PropertyIsNull
 }
+
+import org.opengis.{ filter => ogc }
 
 import org.opengis.filter.expression.{
   BinaryExpression,
@@ -25,8 +26,6 @@ import org.opengis.filter.expression.{
  * @author David Winslow <cdwinslow@gmail.com>
  */
 object CssOps {
-  import SelectorOps._
-
   val colors = Map(
     "aliceblue" -> "#f0f8ff",
     "antiquewhite" -> "#faebd7",
@@ -212,7 +211,7 @@ object CssOps {
           extract(b.getExpression1) ++ extract(b.getExpression2)
         case b: BinaryLogicOperator =>
           b.getChildren().flatMap(extract)
-        case not: Not =>
+        case not: ogc.Not =>
           extract(not.getFilter)
         case b: PropertyIsBetween =>
           extract(b.getExpression) ++
@@ -247,17 +246,17 @@ object CssOps {
      * Find the Specificity for a single Selector
      */
     def apply(x: Selector): Specificity = x match {
-      case (_: TypenameSelector) => Specificity(0, 0, 1)
+      case (_: Typename) => Specificity(0, 0, 1)
       case (_: PseudoSelector) => Specificity(0, 1, 0)
       case (_: ParameterizedPseudoClass) => Specificity(0, 0, 2)
       case (_: PseudoClass) => Specificity(0, 0, 1)
-      case (_: IdSelector) => Specificity(1, 0, 0)
-      case AndSelector(children) =>
+      case (_: Id) => Specificity(1, 0, 0)
+      case And(children) =>
         (children.map(apply) :\ Specificity(0, 0, 0)) { _ + _ }
-      case OrSelector(children) =>
+      case Or(children) =>
         children.map(apply).max
-      case expr: ExpressionSelector =>
-        Specificity(0, countAttributes(expr.asFilter), 0)
+      case DataSelector(f) =>
+        Specificity(0, countAttributes(f), 0)
       case _ => Specificity(0, 0, 0)
     }
 

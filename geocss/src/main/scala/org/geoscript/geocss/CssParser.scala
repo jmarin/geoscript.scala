@@ -29,8 +29,10 @@ object CssParser extends RegexParsers {
     }
 
   private val expressionSelectorPartial =
-    new PartialFunction[String,ExpressionSelector] {
-      def apply(s: String): ExpressionSelector = ExpressionSelector(s)
+    new PartialFunction[String, Selector] {
+      def apply(exp: String): Selector = 
+        Selector.asSelector(ECQL.toFilter(exp)) 
+
       def isDefinedAt(exp: String): Boolean = 
         try {
           ECQL.toFilter(exp); true
@@ -123,11 +125,11 @@ object CssParser extends RegexParsers {
 
   private val propertyList = "{" ~> rep1sep(property, ";") <~ (";"?) ~ "}"
 
-  private val idSelector = ("#" ~> fid) map IdSelector
+  private val idSelector = ("#" ~> fid) map Id
 
-  private val catchAllSelector = ("*": Parser[String]) map {_ => AcceptSelector}
+  private val catchAllSelector = ("*": Parser[String]) map {_ => Accept}
 
-  private val typeNameSelector = identifier map TypenameSelector
+  private val typeNameSelector = identifier map Typename
 
   private val basicSelector: Parser[Selector] =
     (catchAllSelector | idSelector | typeNameSelector | pseudoSelector |
@@ -155,7 +157,7 @@ object CssParser extends RegexParsers {
 
         for (s <- selector.groupBy(spec).values) yield {
           def extractSelector(xs: List[Either[Selector, Context]]): Selector =
-            AndSelector(
+            And(
               xs map {
                 case Left(sel) => sel
                 case Right(pseudoSel) => pseudoSel
@@ -167,7 +169,7 @@ object CssParser extends RegexParsers {
 
           val sels =     s map extractSelector
           val contexts = s map extractContext
-          Rule(desc, List(OrSelector(sels)), contexts map (Pair(_, props)))
+          Rule(desc, List(Or(sels)), contexts map (Pair(_, props)))
         }
     }
 
@@ -179,6 +181,7 @@ object CssParser extends RegexParsers {
   def parse(input: java.io.InputStream): ParseResult[Seq[Rule]] =
     parse(new java.io.InputStreamReader(input))
 
-  def parse(input: java.io.Reader): ParseResult[Seq[Rule]] =
+  def parse(input: java.io.Reader): ParseResult[Seq[Rule]] = synchronized {
     parseAll(styleSheet, input)
+  }
 }
